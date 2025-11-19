@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Polygon Grid Demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="toolbar" role="toolbar">
+      <div class="mode-controls" aria-label="Polygon tools">
+        <button class="mode-button" type="button" data-mode="add" aria-pressed="false">
+          Add polygon
+        </button>
+        <button class="mode-button" type="button" data-mode="subtract" aria-pressed="false">
+          Subtract polygon
+        </button>
+      </div>
+      <div class="stats">
+        <span>Cells inside:</span>
+        <strong id="cell-count">0</strong>
+      </div>
+      <div class="controls">
+        <button id="reset-view" type="button">Reset view</button>
+        <button id="clear-region" type="button">Clear</button>
+      </div>
+    </div>
+    <canvas id="main-canvas"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
