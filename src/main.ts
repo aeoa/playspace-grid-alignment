@@ -33,11 +33,21 @@ const updateCellCountLabel = toolbarControls.updateCellCount;
 let activePointerId: number | null = null;
 let isPanning = false;
 let lastPointerPosition: Vec2 | null = null;
+const MIN_CAMERA_ZOOM = 10;
+const MAX_CAMERA_ZOOM = 200;
 const FIRST_VERTEX_CLICK_RADIUS = 14;
 const FIRST_VERTEX_HOVER_RADIUS = 14;
 const ORIGIN_HANDLE_RADIUS = 18;
 const AXIS_HANDLE_DISTANCE = 10;
 const ROTATION_HANDLE_MIN_T = 0.4;
+const activeTouchPoints = new Map<number, Vec2>();
+type TouchGestureState = {
+  prevCentroid: Vec2;
+  startDistance: number;
+  startZoom: number;
+  focusWorld: Vec2;
+};
+let touchGesture: TouchGestureState | null = null;
 
 setupCanvasSizing(canvas, ctx, state);
 setupInteractions(canvas);
@@ -157,6 +167,15 @@ function onPointerDown(event: PointerEvent) {
   const pointer = { x: event.clientX, y: event.clientY };
   canvas.setPointerCapture(event.pointerId);
 
+  if (event.pointerType === "touch") {
+    activeTouchPoints.set(event.pointerId, pointer);
+    if (activeTouchPoints.size >= 2) {
+      beginTouchGesture();
+      event.preventDefault();
+      return;
+    }
+  }
+
   if (activePointerId === null) {
     activePointerId = event.pointerId;
     lastPointerPosition = pointer;
@@ -214,6 +233,20 @@ function onPointerMove(event: PointerEvent) {
   const pointerWorld = screenToWorld(pointer, state.camera);
   const isActivePointer = activePointerId === event.pointerId;
 
+  if (event.pointerType === "touch") {
+    activeTouchPoints.set(event.pointerId, pointer);
+    if (touchGesture) {
+      updateTouchGesture();
+      event.preventDefault();
+      return;
+    }
+    if (activeTouchPoints.size >= 2) {
+      beginTouchGesture();
+      event.preventDefault();
+      return;
+    }
+  }
+
   if (isActivePointer && isPanning && lastPointerPosition) {
     const delta = {
       x: pointer.x - lastPointerPosition.x,
@@ -261,6 +294,16 @@ function onPointerMove(event: PointerEvent) {
 function onPointerUp(event: PointerEvent) {
   const pointer = { x: event.clientX, y: event.clientY };
   const pointerWorld = screenToWorld(pointer, state.camera);
+
+  if (event.pointerType === "touch") {
+    activeTouchPoints.delete(event.pointerId);
+    if (touchGesture && activeTouchPoints.size >= 2) {
+      beginTouchGesture();
+    } else if (touchGesture && activeTouchPoints.size < 2) {
+      endTouchGesture();
+    }
+  }
+
   if (activePointerId === event.pointerId) {
     activePointerId = null;
     lastPointerPosition = null;
@@ -273,14 +316,20 @@ function onPointerUp(event: PointerEvent) {
   updatePointerHover(pointer, pointerWorld);
 }
 
-function onPointerLeave() {
+function onPointerLeave(event?: PointerEvent) {
+  if (event?.pointerType === "touch") {
+    activeTouchPoints.delete(event.pointerId);
+    if (touchGesture && activeTouchPoints.size < 2) {
+      endTouchGesture();
+    }
+  }
   updatePointerHover(null, null);
 }
 
 function onWheel(event: WheelEvent) {
   event.preventDefault();
   const zoomFactor = Math.exp(-event.deltaY * 0.001);
-  const clampedZoom = Math.min(200, Math.max(10, state.camera.zoom * zoomFactor));
+  const clampedZoom = clampZoom(state.camera.zoom * zoomFactor);
   const screenPoint = { x: event.clientX, y: event.clientY };
   const worldBefore = screenToWorld(screenPoint, state.camera);
 
@@ -404,6 +453,100 @@ function distanceToSegment(
   const closest = { x: start.x + abx * t, y: start.y + aby * t };
   const distance = Math.hypot(point.x - closest.x, point.y - closest.y);
   return { distance, t, closest };
+}
+
+function beginTouchGesture() {
+  if (activeTouchPoints.size < 2) {
+    touchGesture = null;
+    return;
+  }
+  const centroid = computeTouchCentroid();
+  const distance = computeTouchDistance();
+  if (!centroid || !distance) {
+    touchGesture = null;
+    return;
+  }
+  touchGesture = {
+    prevCentroid: centroid,
+    startDistance: distance,
+    startZoom: state.camera.zoom,
+    focusWorld: screenToWorld(centroid, state.camera),
+  };
+  state.drawingCursorWorld = null;
+  state.hoveredFirstVertex = false;
+}
+
+function updateTouchGesture() {
+  if (!touchGesture) {
+    return;
+  }
+  if (activeTouchPoints.size < 2) {
+    endTouchGesture();
+    return;
+  }
+  const centroid = computeTouchCentroid();
+  const distance = computeTouchDistance();
+  if (!centroid || !distance || touchGesture.startDistance === 0) {
+    endTouchGesture();
+    return;
+  }
+
+  const delta = {
+    x: centroid.x - touchGesture.prevCentroid.x,
+    y: centroid.y - touchGesture.prevCentroid.y,
+  };
+  state.camera.offset.x += delta.x;
+  state.camera.offset.y += delta.y;
+  touchGesture.prevCentroid = centroid;
+
+  const zoomFactor = distance / touchGesture.startDistance;
+  const nextZoom = clampZoom(touchGesture.startZoom * zoomFactor);
+  state.camera.zoom = nextZoom;
+  const screenAfter = worldToScreen(touchGesture.focusWorld, state.camera);
+  const adjust = {
+    x: centroid.x - screenAfter.x,
+    y: centroid.y - screenAfter.y,
+  };
+  state.camera.offset.x += adjust.x;
+  state.camera.offset.y += adjust.y;
+
+  state.drawingCursorWorld = null;
+  state.hoveredFirstVertex = false;
+}
+
+function endTouchGesture() {
+  touchGesture = null;
+}
+
+function computeTouchCentroid(): Vec2 | null {
+  if (activeTouchPoints.size === 0) {
+    return null;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  activeTouchPoints.forEach((point) => {
+    sumX += point.x;
+    sumY += point.y;
+  });
+  const count = activeTouchPoints.size;
+  return { x: sumX / count, y: sumY / count };
+}
+
+function computeTouchDistance(): number | null {
+  if (activeTouchPoints.size < 2) {
+    return null;
+  }
+  const iterator = activeTouchPoints.values();
+  const first = iterator.next();
+  const second = iterator.next();
+  if (first.done || second.done) {
+    return null;
+  }
+  return Math.hypot(second.value.x - first.value.x, second.value.y - first.value.y);
+}
+
+function clampZoom(value: number): number {
+  return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, value));
 }
 
 function update() {
