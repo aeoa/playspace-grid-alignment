@@ -62,6 +62,18 @@ button:hover {
   border-color: rgba(94, 255, 154, 0.6);
 }
 
+.mode-button[data-mode="add"].active {
+  background: rgba(80, 228, 148, 0.3);
+  border-color: rgba(80, 228, 148, 0.85);
+  color: #afffd4;
+}
+
+.mode-button[data-mode="subtract"].active {
+  background: rgba(255, 106, 106, 0.25);
+  border-color: rgba(255, 106, 106, 0.8);
+  color: #ffe1e1;
+}
+
 .controls {
   display: flex;
   gap: 8px;

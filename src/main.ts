@@ -81,9 +81,7 @@ type ToolbarActions = {
 };
 
 function setupToolbar(appState: AppState, actions: ToolbarActions) {
-  const modeButtons = Array.from(
-    document.querySelectorAll<HTMLButtonElement>(".mode-button"),
-  );
+  const modeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-button"));
   const cellCountElement = document.getElementById("cell-count") as HTMLElement | null;
 
   const updateModeButtons = () => {
@@ -215,8 +213,15 @@ function onPointerDown(event: PointerEvent) {
     return;
   }
 
-  const gizmoHit = hitTestGridGizmo(pointer);
+  const gizmoHit =
+    state.interactionMode === "drawing_polygon" ? null : hitTestGridGizmo(pointer);
   if (gizmoHit) {
+    if (state.drawingPolygon.length === 0 && state.polygonMode) {
+      state.polygonMode = null;
+      state.hoveredFirstVertex = false;
+      state.drawingCursorWorld = null;
+      toolbarControls.updateModeButtons();
+    }
     state.interactionMode = gizmoHit;
     state.hoveredGizmo = gizmoHit === "dragging_grid_origin" ? "origin" : "axis";
     event.preventDefault();
@@ -425,6 +430,11 @@ function updateHoverStates(screenPoint: Vec2 | null) {
     state.drawingPolygon.length >= 3 &&
     isPointerNearFirstVertex(screenPoint, FIRST_VERTEX_HOVER_RADIUS);
   state.hoveredFirstVertex = shouldHighlightFirst;
+
+  if (state.interactionMode === "drawing_polygon") {
+    state.hoveredGizmo = null;
+    return;
+  }
 
   if (state.interactionMode === "dragging_grid_origin") {
     state.hoveredGizmo = "origin";

@@ -95,7 +95,9 @@ function drawInProgressPolygon(ctx: CanvasRenderingContext2D, state: AppState) {
     return;
   }
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(255, 210, 120, 0.9)";
+  const isSubtracting = state.polygonMode === "subtract";
+  const strokeColor = isSubtracting ? "rgba(255, 120, 120, 0.95)" : "rgba(120, 255, 180, 0.95)";
+  ctx.strokeStyle = strokeColor;
   ctx.setLineDash([6, 4]);
   ctx.beginPath();
 
@@ -115,7 +117,7 @@ function drawInProgressPolygon(ctx: CanvasRenderingContext2D, state: AppState) {
     const last = state.drawingPolygon[state.drawingPolygon.length - 1];
     const lastScreen = worldToScreen(last, state.camera);
     const cursorScreen = worldToScreen(state.drawingCursorWorld, state.camera);
-    ctx.strokeStyle = "rgba(255, 210, 120, 0.6)";
+    ctx.strokeStyle = isSubtracting ? "rgba(255, 140, 140, 0.7)" : "rgba(120, 255, 190, 0.7)";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
@@ -128,7 +130,9 @@ function drawInProgressPolygon(ctx: CanvasRenderingContext2D, state: AppState) {
   const first = state.drawingPolygon[0];
   const firstScreen = worldToScreen(first, state.camera);
   const handleRadius = state.hoveredFirstVertex ? 8 : 6;
-  ctx.fillStyle = state.hoveredFirstVertex ? "rgba(255, 235, 180, 0.95)" : "rgba(255, 210, 120, 0.9)";
+  const handleFill = isSubtracting ? "rgba(255, 150, 150, 0.95)" : "rgba(170, 255, 200, 0.95)";
+  const handleFillHover = isSubtracting ? "rgba(255, 175, 175, 1)" : "rgba(185, 255, 215, 1)";
+  ctx.fillStyle = state.hoveredFirstVertex ? handleFillHover : handleFill;
   ctx.strokeStyle = state.hoveredFirstVertex ? "rgba(32, 32, 32, 0.9)" : "rgba(12, 12, 12, 0.8)";
   ctx.lineWidth = state.hoveredFirstVertex ? 2 : 1;
   ctx.beginPath();
@@ -136,7 +140,7 @@ function drawInProgressPolygon(ctx: CanvasRenderingContext2D, state: AppState) {
   ctx.fill();
   ctx.stroke();
   if (state.hoveredFirstVertex) {
-    ctx.strokeStyle = "rgba(255, 235, 180, 0.6)";
+    ctx.strokeStyle = isSubtracting ? "rgba(255, 150, 150, 0.6)" : "rgba(170, 255, 200, 0.6)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(firstScreen.x, firstScreen.y, handleRadius + 4, 0, Math.PI * 2);
