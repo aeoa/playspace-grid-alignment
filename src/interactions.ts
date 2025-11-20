@@ -30,6 +30,7 @@ export function setupInteractions(options: InteractionOptions): void {
   let lastPointerPosition: Vec2 | null = null;
   const activeTouchPoints = new Map<number, Vec2>();
   let touchGesture: TouchGestureState | null = null;
+  const isWindowsPlatform = navigator.userAgent.toLowerCase().includes("windows");
 
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
@@ -221,8 +222,9 @@ export function setupInteractions(options: InteractionOptions): void {
   function onWheel(event: WheelEvent) {
     event.preventDefault();
     const screenPoint = { x: event.clientX, y: event.clientY };
-    if (event.ctrlKey) {
-      const sensitivity = 0.005;
+    const shouldZoom = event.ctrlKey || isWindowsPlatform;
+    if (shouldZoom) {
+      const sensitivity = isWindowsPlatform ? 0.0015 : 0.005;
       const zoomFactor = Math.exp(-event.deltaY * sensitivity);
       const clampedZoom = clampZoom(state.camera.zoom * zoomFactor);
       const worldBefore = screenToWorld(screenPoint, state.camera);
