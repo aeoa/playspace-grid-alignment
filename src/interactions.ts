@@ -1,10 +1,5 @@
-import {
-  applyPolygonBoolean,
-  gridToWorld,
-  polylineToClipPolygon,
-  screenToWorld,
-  worldToScreen,
-} from "./geometry";
+import { applyPolygonBoolean, polylineToClipPolygon, screenToWorld, worldToScreen } from "./geometry";
+import { computeAxisTipWorld } from "./gizmo";
 import { clampZoom } from "./camera";
 import type { AppState, GridGizmoHover, InteractionMode, Vec2 } from "./state";
 import type { ToolbarControls } from "./toolbar";
@@ -325,7 +320,7 @@ export function setupInteractions(options: InteractionOptions): void {
       return "origin";
     }
 
-    const axisWorld = gridToWorld({ x: state.grid.spacing * 0.8, y: 0 }, state.grid);
+    const axisWorld = computeAxisTipWorld(state.grid, state.camera);
     const axisScreen = worldToScreen(axisWorld, state.camera);
     const { distance, t } = distanceToSegment(screenPoint, originScreen, axisScreen);
     if (distance <= AXIS_HANDLE_DISTANCE && t >= ROTATION_HANDLE_MIN_T) {

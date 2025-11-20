@@ -1,4 +1,5 @@
 import { gridToWorld, screenToWorld, worldToGrid, worldToScreen } from "./geometry";
+import { computeAxisTipWorld } from "./gizmo";
 import { sampleRasterAtGridPoint } from "./raster";
 import type { AppState, Vec2 } from "./state";
 
@@ -150,7 +151,7 @@ function drawInProgressPolygon(ctx: CanvasRenderingContext2D, state: AppState) {
 
 function drawGridGizmo(ctx: CanvasRenderingContext2D, state: AppState) {
   const originScreen = worldToScreen(state.grid.origin, state.camera);
-  const axisWorld = gridToWorld({ x: state.grid.spacing * 0.8, y: 0 }, state.grid);
+  const axisWorld = computeAxisTipWorld(state.grid, state.camera);
   const axisScreen = worldToScreen(axisWorld, state.camera);
 
   const originActive =
