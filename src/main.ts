@@ -28,7 +28,10 @@ const ctx = context;
 
 const state = createInitialState();
 let rasterDirty = true;
-const toolbarControls = setupToolbar(state, () => resetView(state));
+const toolbarControls = setupToolbar(state, {
+  onResetView: () => resetCamera(state),
+  onResetGrid: () => resetGrid(state),
+});
 const updateCellCountLabel = toolbarControls.updateCellCount;
 let activePointerId: number | null = null;
 let isPanning = false;
@@ -54,20 +57,30 @@ setupInteractions(canvas);
 toolbarControls.updateModeButtons();
 updateCellCountLabel(0);
 
-function resetView(appState: AppState) {
+function resetCamera(appState: AppState) {
   appState.camera.zoom = INITIAL_CAMERA_ZOOM;
   appState.camera.offset.x = window.innerWidth / 2;
   appState.camera.offset.y = window.innerHeight / 2;
-  appState.grid.origin.x = 0;
-  appState.grid.origin.y = 0;
-  appState.grid.angle = 0;
   appState.drawingCursorWorld = null;
   appState.hoveredGizmo = null;
   appState.hoveredFirstVertex = false;
   rasterDirty = true;
 }
 
-function setupToolbar(appState: AppState, onResetView: () => void) {
+function resetGrid(appState: AppState) {
+  appState.grid.origin.x = 0;
+  appState.grid.origin.y = 0;
+  appState.grid.angle = 0;
+  appState.hoveredGizmo = null;
+  rasterDirty = true;
+}
+
+type ToolbarActions = {
+  onResetView: () => void;
+  onResetGrid: () => void;
+};
+
+function setupToolbar(appState: AppState, actions: ToolbarActions) {
   const modeButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>(".mode-button"),
   );
@@ -119,9 +132,14 @@ function setupToolbar(appState: AppState, onResetView: () => void) {
     updateCellCount(0);
   });
 
-  const resetButton = document.getElementById("reset-view");
-  resetButton?.addEventListener("click", () => {
-    onResetView();
+  const resetCameraButton = document.getElementById("reset-camera");
+  resetCameraButton?.addEventListener("click", () => {
+    actions.onResetView();
+  });
+
+  const resetGridButton = document.getElementById("reset-grid");
+  resetGridButton?.addEventListener("click", () => {
+    actions.onResetGrid();
   });
 
   return {
