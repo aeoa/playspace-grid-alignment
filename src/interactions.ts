@@ -224,7 +224,7 @@ export function setupInteractions(options: InteractionOptions): void {
     const screenPoint = { x: event.clientX, y: event.clientY };
     const shouldZoom = event.ctrlKey || isWindowsPlatform;
     if (shouldZoom) {
-      const sensitivity = 0.005;
+      const sensitivity = isWindowsPlatform ? 0.0015 : 0.005;
       const zoomFactor = Math.exp(-event.deltaY * sensitivity);
       const clampedZoom = clampZoom(state.camera.zoom * zoomFactor);
       const worldBefore = screenToWorld(screenPoint, state.camera);
