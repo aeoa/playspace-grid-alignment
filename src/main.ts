@@ -210,6 +210,10 @@ function onPointerDown(event: PointerEvent) {
     state.drawingPolygon = [];
     state.drawingCursorWorld = null;
     state.hoveredFirstVertex = false;
+    isPanning = true;
+    lastPointerPosition = pointer;
+    activePointerId = event.pointerId;
+    event.preventDefault();
     return;
   }
 
@@ -328,20 +332,28 @@ function onPointerLeave(event?: PointerEvent) {
 
 function onWheel(event: WheelEvent) {
   event.preventDefault();
-  const zoomFactor = Math.exp(-event.deltaY * 0.001);
-  const clampedZoom = clampZoom(state.camera.zoom * zoomFactor);
   const screenPoint = { x: event.clientX, y: event.clientY };
-  const worldBefore = screenToWorld(screenPoint, state.camera);
+  if (event.ctrlKey) {
+    const sensitivity = 0.005;
+    const zoomFactor = Math.exp(-event.deltaY * sensitivity);
+    const clampedZoom = clampZoom(state.camera.zoom * zoomFactor);
+    const worldBefore = screenToWorld(screenPoint, state.camera);
 
-  state.camera.zoom = clampedZoom;
-  const worldAfter = worldBefore;
-  const screenAfter = worldToScreen(worldAfter, state.camera);
-  const deltaScreen = {
-    x: screenPoint.x - screenAfter.x,
-    y: screenPoint.y - screenAfter.y,
-  };
-  state.camera.offset.x += deltaScreen.x;
-  state.camera.offset.y += deltaScreen.y;
+    state.camera.zoom = clampedZoom;
+    const screenAfter = worldToScreen(worldBefore, state.camera);
+    const deltaScreen = {
+      x: screenPoint.x - screenAfter.x,
+      y: screenPoint.y - screenAfter.y,
+    };
+    state.camera.offset.x += deltaScreen.x;
+    state.camera.offset.y += deltaScreen.y;
+    const worldPoint = screenToWorld(screenPoint, state.camera);
+    updatePointerHover(screenPoint, worldPoint);
+    return;
+  }
+
+  state.camera.offset.x -= event.deltaX;
+  state.camera.offset.y -= event.deltaY;
   const worldPoint = screenToWorld(screenPoint, state.camera);
   updatePointerHover(screenPoint, worldPoint);
 }
