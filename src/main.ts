@@ -9,6 +9,7 @@ import {
 } from "./geometry";
 import { renderScene } from "./render";
 import { rasterizeRegion } from "./raster";
+import { setupToolbar } from "./toolbar";
 import { createInitialState, INITIAL_CAMERA_ZOOM } from "./state";
 import type {
   AppState,
@@ -28,8 +29,11 @@ const ctx = context;
 
 const state = createInitialState();
 let rasterDirty = true;
-const toolbarControls = setupToolbar(state, {
-  onResetView: () => resetCamera(state),
+const toolbarControls = setupToolbar({
+  isModeActive: (mode) => state.polygonMode === mode,
+  onModeToggle: (mode) => handleModeToggle(mode),
+  onClear: () => clearRegion(state),
+  onResetCamera: () => resetCamera(state),
   onResetGrid: () => resetGrid(state),
 });
 const updateCellCountLabel = toolbarControls.updateCellCount;
@@ -75,75 +79,25 @@ function resetGrid(appState: AppState) {
   rasterDirty = true;
 }
 
-type ToolbarActions = {
-  onResetView: () => void;
-  onResetGrid: () => void;
-};
+function handleModeToggle(mode: PolygonBooleanMode) {
+  const nextMode: PolygonMode = state.polygonMode === mode ? null : mode;
+  state.drawingPolygon = [];
+  state.drawingCursorWorld = null;
+  state.interactionMode = "idle";
+  state.hoveredFirstVertex = false;
+  state.polygonMode = nextMode;
+  toolbarControls.updateModeButtons();
+}
 
-function setupToolbar(appState: AppState, actions: ToolbarActions) {
-  const modeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-button"));
-  const cellCountElement = document.getElementById("cell-count") as HTMLElement | null;
-
-  const updateModeButtons = () => {
-    modeButtons.forEach((button) => {
-      const buttonMode = button.dataset.mode as PolygonBooleanMode | undefined;
-      if (!buttonMode) {
-        return;
-      }
-      const isActive = appState.polygonMode === buttonMode;
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-  };
-
-  const updateCellCount = (value: number) => {
-    if (cellCountElement) {
-      cellCountElement.textContent = value.toString();
-    }
-  };
-
-  modeButtons.forEach((button) => {
-    const buttonMode = button.dataset.mode as PolygonBooleanMode | undefined;
-    if (!buttonMode) {
-      return;
-    }
-    button.addEventListener("click", () => {
-      const nextMode: PolygonMode = appState.polygonMode === buttonMode ? null : buttonMode;
-      appState.drawingPolygon = [];
-      appState.drawingCursorWorld = null;
-      appState.interactionMode = "idle";
-      appState.hoveredFirstVertex = false;
-      appState.polygonMode = nextMode;
-      updateModeButtons();
-    });
-  });
-
-  const clearButton = document.getElementById("clear-region");
-  clearButton?.addEventListener("click", () => {
-    appState.region = null;
-    appState.drawingPolygon = [];
-    appState.drawingCursorWorld = null;
-    appState.interactionMode = "idle";
-    appState.hoveredFirstVertex = false;
-    appState.hoveredGizmo = null;
-    rasterDirty = true;
-    updateCellCount(0);
-  });
-
-  const resetCameraButton = document.getElementById("reset-camera");
-  resetCameraButton?.addEventListener("click", () => {
-    actions.onResetView();
-  });
-
-  const resetGridButton = document.getElementById("reset-grid");
-  resetGridButton?.addEventListener("click", () => {
-    actions.onResetGrid();
-  });
-
-  return {
-    updateModeButtons,
-    updateCellCount,
-  };
+function clearRegion(appState: AppState) {
+  appState.region = null;
+  appState.drawingPolygon = [];
+  appState.drawingCursorWorld = null;
+  appState.interactionMode = "idle";
+  appState.hoveredFirstVertex = false;
+  appState.hoveredGizmo = null;
+  rasterDirty = true;
+  toolbarControls.updateCellCount(0);
 }
 
 function setupCanvasSizing(
