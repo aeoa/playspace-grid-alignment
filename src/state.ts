@@ -62,6 +62,7 @@ export interface RasterResult {
   gridSpacing: number;
   gridSampleBounds: GridSampleBounds;
   gridCellCount: number;
+  insideCells: Set<string>;
 }
 
 export interface AppState {

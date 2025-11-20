@@ -70,9 +70,12 @@ export function rasterizeRegion(region: MultiPolygon | null, grid: GridState): R
     gridSpacing: grid.spacing,
     gridSampleBounds,
     gridCellCount: 0,
+    insideCells: new Set(),
   };
 
-  rasterResult.gridCellCount = countGridCellsInside(rasterResult);
+  const { insideCells, count } = computeLargestComponent(rasterResult);
+  rasterResult.gridCellCount = count;
+  rasterResult.insideCells = insideCells;
   return rasterResult;
 }
 
@@ -93,18 +96,72 @@ function computeGridSampleBounds(mask: RasterMask, spacing: number): GridSampleB
   };
 }
 
-function countGridCellsInside(raster: RasterResult): number {
+function computeLargestComponent(
+  raster: RasterResult,
+): { insideCells: Set<string>; count: number } {
+  const visited = new Set<string>();
+  let bestComponent: Set<string> = new Set();
+
   const { gridSampleBounds } = raster;
-  let count = 0;
+  const directions = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  const encode = (gx: number, gy: number) => `${gx},${gy}`;
+
   for (let gy = gridSampleBounds.minY; gy <= gridSampleBounds.maxY; gy += 1) {
     for (let gx = gridSampleBounds.minX; gx <= gridSampleBounds.maxX; gx += 1) {
+      const key = encode(gx, gy);
+      if (visited.has(key)) {
+        continue;
+      }
       const gridCenter: Vec2 = { x: gx * raster.gridSpacing, y: gy * raster.gridSpacing };
-      if (sampleRasterAtGridPoint(raster, gridCenter)) {
-        count += 1;
+      if (!sampleRasterAtGridPoint(raster, gridCenter)) {
+        visited.add(key);
+        continue;
+      }
+
+      const queue: Vec2[] = [{ x: gx, y: gy }];
+      const component = new Set<string>();
+      visited.add(key);
+      component.add(key);
+
+      while (queue.length > 0) {
+        const cell = queue.shift()!;
+        for (const dir of directions) {
+          const nx = cell.x + dir.x;
+          const ny = cell.y + dir.y;
+          const nkey = encode(nx, ny);
+          if (nx < gridSampleBounds.minX || nx > gridSampleBounds.maxX) {
+            continue;
+          }
+          if (ny < gridSampleBounds.minY || ny > gridSampleBounds.maxY) {
+            continue;
+          }
+          if (visited.has(nkey)) {
+            continue;
+          }
+          const neighborCenter: Vec2 = { x: nx * raster.gridSpacing, y: ny * raster.gridSpacing };
+          if (!sampleRasterAtGridPoint(raster, neighborCenter)) {
+            visited.add(nkey);
+            continue;
+          }
+          visited.add(nkey);
+          component.add(nkey);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+
+      if (component.size > bestComponent.size) {
+        bestComponent = component;
       }
     }
   }
-  return count;
+
+  return { insideCells: bestComponent, count: bestComponent.size };
 }
 
 /**

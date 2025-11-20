@@ -1,6 +1,5 @@
 import { gridToWorld, screenToWorld, worldToGrid, worldToScreen } from "./geometry";
 import { computeAxisTipWorld } from "./gizmo";
-import { sampleRasterAtGridPoint } from "./raster";
 import type { AppState, Vec2 } from "./state";
 
 export function renderScene(ctx: CanvasRenderingContext2D, state: AppState): void {
@@ -207,11 +206,11 @@ function drawRasterOverlay(ctx: CanvasRenderingContext2D, state: AppState) {
 
   for (let iy = raster.gridSampleBounds.minY; iy <= raster.gridSampleBounds.maxY; iy += 1) {
     for (let ix = raster.gridSampleBounds.minX; ix <= raster.gridSampleBounds.maxX; ix += 1) {
-      const gridCenter: Vec2 = { x: ix * grid.spacing, y: iy * grid.spacing };
-      const value = sampleRasterAtGridPoint(raster, gridCenter);
-      if (!value) {
+      const key = `${ix},${iy}`;
+      if (!raster.insideCells.has(key)) {
         continue;
       }
+      const gridCenter: Vec2 = { x: ix * grid.spacing, y: iy * grid.spacing };
       const cornersGrid: Vec2[] = [
         { x: gridCenter.x - half, y: gridCenter.y - half },
         { x: gridCenter.x + half, y: gridCenter.y - half },
