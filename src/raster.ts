@@ -9,7 +9,7 @@ import type {
 } from "./state";
 
 const RASTER_MARGIN_CELLS = 2;
-const RASTER_RESOLUTION = 10;
+export const RASTER_RESOLUTION = 10;
 
 export function rasterizeRegion(region: MultiPolygon | null, grid: GridState): RasterResult | null {
   if (!region) {
@@ -83,11 +83,104 @@ export function sampleRasterAtGridPoint(raster: RasterResult, gridPoint: Vec2): 
   return erodeGridCell(raster, gridPoint) ? 1 : 0;
 }
 
+export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid: Vec2): number {
+  const visited = new Set<string>();
+  let bestCount = 0;
+
+  const gridSampleBounds = computeGridSampleBoundsWithOffset(
+    raster.mask,
+    raster.gridSpacing,
+    offsetGrid,
+  );
+  const directions = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  const encode = (gx: number, gy: number) => `${gx},${gy}`;
+  const spacing = raster.gridSpacing;
+
+  for (let gy = gridSampleBounds.minY; gy <= gridSampleBounds.maxY; gy += 1) {
+    for (let gx = gridSampleBounds.minX; gx <= gridSampleBounds.maxX; gx += 1) {
+      const key = encode(gx, gy);
+      if (visited.has(key)) {
+        continue;
+      }
+      const gridCenter: Vec2 = {
+        x: gx * spacing + offsetGrid.x,
+        y: gy * spacing + offsetGrid.y,
+      };
+      if (!erodeGridCell(raster, gridCenter)) {
+        visited.add(key);
+        continue;
+      }
+
+      const queue: Vec2[] = [{ x: gx, y: gy }];
+      let componentSize = 0;
+      visited.add(key);
+
+      while (queue.length > 0) {
+        const cell = queue.shift()!;
+        componentSize += 1;
+        for (const dir of directions) {
+          const nx = cell.x + dir.x;
+          const ny = cell.y + dir.y;
+          const nkey = encode(nx, ny);
+          if (nx < gridSampleBounds.minX || nx > gridSampleBounds.maxX) {
+            continue;
+          }
+          if (ny < gridSampleBounds.minY || ny > gridSampleBounds.maxY) {
+            continue;
+          }
+          if (visited.has(nkey)) {
+            continue;
+          }
+          const neighborCenter: Vec2 = {
+            x: nx * spacing + offsetGrid.x,
+            y: ny * spacing + offsetGrid.y,
+          };
+          if (!erodeGridCell(raster, neighborCenter)) {
+            visited.add(nkey);
+            continue;
+          }
+          visited.add(nkey);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+
+      if (componentSize > bestCount) {
+        bestCount = componentSize;
+      }
+    }
+  }
+
+  return bestCount;
+}
+
 function computeGridSampleBounds(mask: RasterMask, spacing: number): GridSampleBounds {
   const minX = mask.originGrid.x;
   const minY = mask.originGrid.y;
   const maxX = mask.originGrid.x + mask.width * mask.cellSize;
   const maxY = mask.originGrid.y + mask.height * mask.cellSize;
+  return {
+    minX: Math.floor(minX / spacing) - 1,
+    maxX: Math.ceil(maxX / spacing) + 1,
+    minY: Math.floor(minY / spacing) - 1,
+    maxY: Math.ceil(maxY / spacing) + 1,
+  };
+}
+
+function computeGridSampleBoundsWithOffset(
+  mask: RasterMask,
+  spacing: number,
+  offset: Vec2,
+): GridSampleBounds {
+  const minX = mask.originGrid.x - offset.x;
+  const minY = mask.originGrid.y - offset.y;
+  const maxX = mask.originGrid.x + mask.width * mask.cellSize - offset.x;
+  const maxY = mask.originGrid.y + mask.height * mask.cellSize - offset.y;
   return {
     minX: Math.floor(minX / spacing) - 1,
     maxX: Math.ceil(maxX / spacing) + 1,

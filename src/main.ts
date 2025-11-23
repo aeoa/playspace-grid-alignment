@@ -7,6 +7,8 @@ import { rasterizeRegion } from "./raster";
 import { setupToolbar } from "./toolbar";
 import { createInitialState } from "./state";
 import type { PolygonBooleanMode } from "./state";
+import { findBestGridAlignmentAsync } from "./gridAlignment";
+import type { GridAlignmentStats } from "./gridAlignment";
 
 const canvas = document.getElementById("main-canvas") as HTMLCanvasElement;
 const context = canvas.getContext("2d");
@@ -17,6 +19,8 @@ const ctx = context;
 
 const state = createInitialState();
 let rasterDirty = true;
+let alignAbortController: AbortController | null = null;
+let lastAlignStatsText = "";
 
 const toolbarControls = setupToolbar({
   isModeActive: (mode) => state.polygonMode === mode,
@@ -27,19 +31,24 @@ const toolbarControls = setupToolbar({
     markRasterDirty();
   },
   onResetGrid: () => {
+    cancelAlignment();
     resetGrid(state);
     markRasterDirty();
   },
+  onAutoAlign: () => autoAlignGrid(),
 });
 
 const updateCellCountLabel = toolbarControls.updateCellCount;
 
 setupCanvasSizing(canvas, ctx, state);
+resetCamera(state);
+markRasterDirty();
 setupInteractions({
   canvas,
   state,
   toolbar: toolbarControls,
   markRasterDirty,
+  cancelAlignment,
 });
 
 toolbarControls.updateModeButtons();
@@ -60,6 +69,7 @@ function handleModeToggle(mode: PolygonBooleanMode) {
 }
 
 function clearRegion() {
+  cancelAlignment();
   state.region = null;
   state.drawingPolygon = [];
   state.drawingCursorWorld = null;
@@ -68,6 +78,63 @@ function clearRegion() {
   state.hoveredGizmo = null;
   markRasterDirty();
   toolbarControls.updateCellCount(0);
+  toolbarControls.setAlignStats("");
+}
+
+function cancelAlignment() {
+  if (!alignAbortController) {
+    return;
+  }
+  alignAbortController.abort();
+  alignAbortController = null;
+  toolbarControls.setAligning(false);
+  toolbarControls.setAlignStats(lastAlignStatsText);
+}
+
+function autoAlignGrid() {
+  if (!state.region) {
+    return;
+  }
+  cancelAlignment();
+  const controller = new AbortController();
+  alignAbortController = controller;
+  toolbarControls.setAligning(true);
+  toolbarControls.setAlignStats("Aligning…");
+  let profile: GridAlignmentStats | null = null;
+  findBestGridAlignmentAsync(state.region, state.grid, {
+    signal: controller.signal,
+    onProfile: (stats) => {
+      profile = stats;
+    },
+  })
+    .then((best) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      alignAbortController = null;
+      toolbarControls.setAligning(false);
+      if (profile) {
+        lastAlignStatsText = `${profile.orientations} orient · ${profile.samples} samples · ${profile.durationMs.toFixed(0)}ms`;
+        toolbarControls.setAlignStats(lastAlignStatsText);
+      }
+      if (!best) {
+        return;
+      }
+      state.grid.origin.x = best.origin.x;
+      state.grid.origin.y = best.origin.y;
+      state.grid.angle = best.angle;
+      markRasterDirty();
+    })
+    .catch((error) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      alignAbortController = null;
+      toolbarControls.setAligning(false);
+      toolbarControls.setAlignStats(lastAlignStatsText);
+      // eslint-disable-next-line no-console
+      console.error("Grid alignment failed", error);
+    });
 }
 
 function update() {

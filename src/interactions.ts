@@ -15,10 +15,11 @@ interface InteractionOptions {
   state: AppState;
   toolbar: ToolbarControls;
   markRasterDirty: () => void;
+  cancelAlignment: () => void;
 }
 
 export function setupInteractions(options: InteractionOptions): void {
-  const { canvas, state, toolbar, markRasterDirty } = options;
+  const { canvas, state, toolbar, markRasterDirty, cancelAlignment } = options;
 
   let activePointerId: number | null = null;
   let isPanning = false;
@@ -77,6 +78,7 @@ export function setupInteractions(options: InteractionOptions): void {
     const gizmoHit =
       state.interactionMode === "drawing_polygon" ? null : hitTestGridGizmo(pointer);
     if (gizmoHit) {
+      cancelAlignment();
       if (state.drawingPolygon.length === 0 && state.polygonMode) {
         state.polygonMode = null;
         state.hoveredFirstVertex = false;
@@ -111,6 +113,7 @@ export function setupInteractions(options: InteractionOptions): void {
       event.preventDefault();
       return;
     }
+    cancelAlignment();
     state.drawingPolygon.push(worldPoint);
     state.interactionMode = "drawing_polygon";
     state.drawingCursorWorld = worldPoint;
@@ -255,6 +258,7 @@ export function setupInteractions(options: InteractionOptions): void {
   }
 
   function finalizePolygon() {
+    cancelAlignment();
     const polygon = polylineToClipPolygon(state.drawingPolygon);
     state.drawingPolygon = [];
     state.drawingCursorWorld = null;

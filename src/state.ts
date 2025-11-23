@@ -79,10 +79,49 @@ export interface AppState {
 }
 
 export const INITIAL_CAMERA_ZOOM = 60;
+const DEFAULT_REGION: MultiPolygon = [
+  [
+    [
+      [-5.21, -6.98],
+      [-3.96, -7.13],
+      [-4.02, -7.67],
+      [0.08, -8.17],
+      [0.22, -7.10],
+      [5.40, -7.74],
+      [5.70, -5.23],
+      [4.10, -5.04],
+      [4.05, -5.39],
+      [1.02, -5.02],
+      [1.67, 0.34],
+      [2.39, 0.25],
+      [2.54, 1.50],
+      [5.58, 1.13],
+      [5.89, 3.63],
+      [5.17, 3.72],
+      [5.61, 7.29],
+      [2.93, 7.62],
+      [2.82, 6.73],
+      [1.03, 6.95],
+      [1.17, 8.02],
+      [-3.84, 8.63],
+      [-4.17, 5.95],
+      [-5.59, 6.13],
+      [-6.08, 2.20],
+      [-4.11, 1.96],
+      [-5.21, -6.98],
+    ] as ClipRing,
+  ],
+];
+
+function cloneRegion(region: MultiPolygon): MultiPolygon {
+  return region.map((polygon) =>
+    polygon.map((ring) => ring.map(([x, y]) => [x, y] as [number, number])),
+  );
+}
 
 export function createInitialState(): AppState {
   return {
-    region: null,
+    region: cloneRegion(DEFAULT_REGION),
     drawingPolygon: [],
     drawingCursorWorld: null,
     polygonMode: null,
