@@ -20,7 +20,6 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
   const modeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-button"));
   const cellCountElement = document.getElementById("cell-count") as HTMLElement | null;
   const autoAlignButton = document.getElementById("auto-align-grid") as HTMLButtonElement | null;
-  const autoAlignLabel = autoAlignButton?.querySelector<HTMLElement>(".label");
   const alignStatsEl = document.getElementById("align-stats") as HTMLElement | null;
 
   const updateModeButtons = () => {
@@ -45,9 +44,6 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
     if (autoAlignButton) {
       autoAlignButton.disabled = value;
       autoAlignButton.classList.toggle("aligning", value);
-    }
-    if (autoAlignLabel) {
-      autoAlignLabel.textContent = value ? "Aligning…" : "Auto align grid";
     }
   };
 
