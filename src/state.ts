@@ -78,6 +78,7 @@ export interface AppState {
   raster: RasterResult | null;
   hoveredGizmo: GridGizmoHover;
   hoveredFirstVertex: boolean;
+  autoAlignEnabled: boolean;
 }
 
 export const INITIAL_CAMERA_ZOOM = 60;
@@ -140,5 +141,6 @@ export function createInitialState(): AppState {
     raster: null,
     hoveredGizmo: null,
     hoveredFirstVertex: false,
+    autoAlignEnabled: false,
   };
 }

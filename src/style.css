@@ -80,13 +80,20 @@ button:hover {
   align-items: center;
 }
 
-#auto-align-grid {
+.auto-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(244, 244, 244, 0.8);
+  user-select: none;
 }
 
-#auto-align-grid .busy-indicator {
+.auto-toggle input {
+  accent-color: #5eff9a;
+}
+
+.auto-toggle .busy-indicator {
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
@@ -98,12 +105,8 @@ button:hover {
   transition: opacity 100ms ease;
 }
 
-#auto-align-grid.aligning .busy-indicator {
+.auto-toggle.aligning .busy-indicator {
   opacity: 1;
-}
-
-#auto-align-grid .label {
-  display: inline-block;
 }
 
 .align-stats {

@@ -16,10 +16,11 @@ interface InteractionOptions {
   toolbar: ToolbarControls;
   markRasterDirty: () => void;
   cancelAlignment: () => void;
+  triggerAutoAlign: () => void;
 }
 
 export function setupInteractions(options: InteractionOptions): void {
-  const { canvas, state, toolbar, markRasterDirty, cancelAlignment } = options;
+  const { canvas, state, toolbar, markRasterDirty, cancelAlignment, triggerAutoAlign } = options;
 
   let activePointerId: number | null = null;
   let isPanning = false;
@@ -151,6 +152,8 @@ export function setupInteractions(options: InteractionOptions): void {
     }
 
     if (isActivePointer && state.interactionMode === "dragging_grid_origin" && lastPointerPosition) {
+      state.autoAlignEnabled = false;
+      toolbar.setAutoAlignChecked(false);
       const prevWorld = screenToWorld(lastPointerPosition, state.camera);
       const delta = {
         x: pointerWorld.x - prevWorld.x,
@@ -165,6 +168,8 @@ export function setupInteractions(options: InteractionOptions): void {
     }
 
     if (isActivePointer && state.interactionMode === "rotating_grid") {
+      state.autoAlignEnabled = false;
+      toolbar.setAutoAlignChecked(false);
       const dir = {
         x: pointerWorld.x - state.grid.origin.x,
         y: pointerWorld.y - state.grid.origin.y,
@@ -274,6 +279,9 @@ export function setupInteractions(options: InteractionOptions): void {
     state.region = applyPolygonBoolean(state.region, polygon, state.polygonMode);
     state.interactionMode = "idle";
     markRasterDirty();
+    if (state.autoAlignEnabled) {
+      triggerAutoAlign();
+    }
   }
 
   function updatePointerHover(screenPoint: Vec2 | null, worldPoint: Vec2 | null) {

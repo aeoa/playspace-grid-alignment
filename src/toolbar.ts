@@ -6,7 +6,7 @@ export interface ToolbarHandlers {
   onClear: () => void;
   onResetCamera: () => void;
   onResetGrid: () => void;
-  onAutoAlign: () => void;
+  onToggleAutoAlign: (enabled: boolean) => void;
 }
 
 export interface ToolbarControls {
@@ -14,13 +14,14 @@ export interface ToolbarControls {
   updateCellCount(value: number): void;
   setAligning(value: boolean): void;
   setAlignStats(value: string): void;
+  setAutoAlignChecked(value: boolean): void;
 }
 
 export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
   const modeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-button"));
   const cellCountElement = document.getElementById("cell-count") as HTMLElement | null;
-  const autoAlignButton = document.getElementById("auto-align-grid") as HTMLButtonElement | null;
   const alignStatsEl = document.getElementById("align-stats") as HTMLElement | null;
+  const autoAlignToggle = document.getElementById("auto-align-toggle") as HTMLInputElement | null;
 
   const updateModeButtons = () => {
     modeButtons.forEach((button) => {
@@ -41,15 +42,23 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
   };
 
   const setAligning = (value: boolean) => {
-    if (autoAlignButton) {
-      autoAlignButton.disabled = value;
-      autoAlignButton.classList.toggle("aligning", value);
+    if (autoAlignToggle?.parentElement) {
+      autoAlignToggle.parentElement.classList.toggle("aligning", value);
+    }
+    if (autoAlignToggle) {
+      autoAlignToggle.disabled = value;
     }
   };
 
   const setAlignStats = (value: string) => {
     if (alignStatsEl) {
       alignStatsEl.textContent = value;
+    }
+  };
+
+  const setAutoAlignChecked = (value: boolean) => {
+    if (autoAlignToggle) {
+      autoAlignToggle.checked = value;
     }
   };
 
@@ -73,8 +82,8 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
     handlers.onResetGrid();
   });
 
-  autoAlignButton?.addEventListener("click", () => {
-    handlers.onAutoAlign();
+  autoAlignToggle?.addEventListener("change", (event) => {
+    handlers.onToggleAutoAlign((event.target as HTMLInputElement).checked);
   });
 
   return {
@@ -82,5 +91,6 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
     updateCellCount,
     setAligning,
     setAlignStats,
+    setAutoAlignChecked,
   };
 }

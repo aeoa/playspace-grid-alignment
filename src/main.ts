@@ -32,10 +32,17 @@ const toolbarControls = setupToolbar({
   },
   onResetGrid: () => {
     cancelAlignment();
+    state.autoAlignEnabled = false;
+    toolbarControls.setAutoAlignChecked(false);
     resetGrid(state);
     markRasterDirty();
   },
-  onAutoAlign: () => autoAlignGrid(),
+  onToggleAutoAlign: (enabled) => {
+    state.autoAlignEnabled = enabled;
+    if (enabled) {
+      triggerAutoAlign();
+    }
+  },
 });
 
 const updateCellCountLabel = toolbarControls.updateCellCount;
@@ -49,6 +56,7 @@ setupInteractions({
   toolbar: toolbarControls,
   markRasterDirty,
   cancelAlignment,
+  triggerAutoAlign,
 });
 
 toolbarControls.updateModeButtons();
@@ -70,6 +78,7 @@ function handleModeToggle(mode: PolygonBooleanMode) {
 
 function clearRegion() {
   cancelAlignment();
+  state.autoAlignEnabled = false;
   state.region = null;
   state.drawingPolygon = [];
   state.drawingCursorWorld = null;
@@ -79,6 +88,7 @@ function clearRegion() {
   markRasterDirty();
   toolbarControls.updateCellCount(0);
   toolbarControls.setAlignStats("");
+  toolbarControls.setAutoAlignChecked(false);
 }
 
 function cancelAlignment() {
@@ -147,6 +157,13 @@ function autoAlignGrid() {
       // eslint-disable-next-line no-console
       console.error("Grid alignment failed", error);
     });
+}
+
+function triggerAutoAlign() {
+  if (!state.autoAlignEnabled) {
+    return;
+  }
+  autoAlignGrid();
 }
 
 function update() {
