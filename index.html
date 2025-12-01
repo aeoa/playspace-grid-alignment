@@ -11,51 +11,53 @@
   </head>
   <body>
     <div class="toolbar" role="toolbar">
-      <div class="mode-column">
-        <div class="mode-controls" aria-label="Polygon tools">
-          <button class="mode-button" type="button" data-mode="add" aria-pressed="false">
-            <span class="icon" aria-hidden="true">+</span>
-          </button>
-          <button class="mode-button" type="button" data-mode="subtract" aria-pressed="false">
-            <span class="icon" aria-hidden="true">−</span>
-          </button>
-          <button id="clear-region" class="mode-button ghost" type="button" aria-label="Clear polygons">
-            <span class="icon trash" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                <path d="M7 9v9c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V9" />
-                <path d="M5 6h14" />
-                <path d="M10 6v-2c0-.6.4-1 1-1h2c.6 0 1 .4 1 1v2" />
-              </svg>
-            </span>
-          </button>
+      <div class="left-column">
+        <div class="mode-column">
+          <div class="mode-controls" aria-label="Polygon tools">
+            <button class="mode-button" type="button" data-mode="add" aria-pressed="false">
+              <span class="icon" aria-hidden="true">+</span>
+            </button>
+            <button class="mode-button" type="button" data-mode="subtract" aria-pressed="false">
+              <span class="icon" aria-hidden="true">−</span>
+            </button>
+            <button id="clear-region" class="mode-button ghost" type="button" aria-label="Clear polygons">
+              <span class="icon trash" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <path d="M7 9v9c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V9" />
+                  <path d="M5 6h14" />
+                  <path d="M10 6v-2c0-.6.4-1 1-1h2c.6 0 1 .4 1 1v2" />
+                </svg>
+              </span>
+            </button>
+          </div>
+          <label class="auto-toggle">
+            <input type="checkbox" id="auto-align-toggle" />
+            <span>Auto align grid</span>
+            <span class="busy-indicator" aria-hidden="true"></span>
+          </label>
         </div>
-        <label class="auto-toggle">
-          <input type="checkbox" id="auto-align-toggle" />
-          <span>Auto align grid</span>
-          <span class="busy-indicator" aria-hidden="true"></span>
-        </label>
-      </div>
-      <div class="stacked-stats">
-        <div class="stats">
-          <span>Cells inside:</span>
-          <strong id="cell-count">0</strong>
+        <div class="stacked-stats">
+          <span id="align-stats" class="align-stats" aria-live="polite"></span>
+          <div class="stats">
+            <span>Cells inside:</span>
+            <strong id="cell-count">0</strong>
+          </div>
         </div>
-        <span id="align-stats" class="align-stats" aria-live="polite"></span>
       </div>
-      <div class="controls">
-        <button id="reset-camera" class="icon-button" type="button" aria-label="Reset view">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <path d="M5 9V6a1 1 0 0 1 1-1h3" />
-            <path d="M19 9V6a1 1 0 0 0-1-1h-3" />
-            <path d="M5 15v3a1 1 0 0 0 1 1h3" />
-            <path d="M19 15v3a1 1 0 0 1-1 1h-3" />
-            <path d="M9 9 6 6" />
-            <path d="m18 6-3 3" />
-            <path d="M6 18l3-3" />
-            <path d="m18 18-3-3" />
-          </svg>
-        </button>
-      </div>
+    </div>
+    <div class="floating-reset">
+      <button id="reset-camera" class="icon-button" type="button" aria-label="Reset view">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <path d="M5 9V6a1 1 0 0 1 1-1h3" />
+          <path d="M19 9V6a1 1 0 0 0-1-1h-3" />
+          <path d="M5 15v3a1 1 0 0 0 1 1h3" />
+          <path d="M19 15v3a1 1 0 0 1-1 1h-3" />
+          <path d="M9 9 6 6" />
+          <path d="m18 6-3 3" />
+          <path d="M6 18l3-3" />
+          <path d="m18 18-3-3" />
+        </svg>
+      </button>
     </div>
     <canvas id="main-canvas"></canvas>
     <script type="module" src="/src/main.ts"></script>

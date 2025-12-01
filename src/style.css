@@ -39,6 +39,12 @@ body {
   gap: 8px;
 }
 
+.left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .mode-column {
   display: flex;
   flex-direction: column;
@@ -185,6 +191,13 @@ button:hover {
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
+}
+
+.floating-reset {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 11;
 }
 
 @keyframes spin {

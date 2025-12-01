@@ -8,7 +8,6 @@ import { setupToolbar } from "./toolbar";
 import { createInitialState } from "./state";
 import type { PolygonBooleanMode } from "./state";
 import { findBestGridAlignmentAsync } from "./gridAlignment";
-import type { GridAlignmentStats } from "./gridAlignment";
 
 const canvas = document.getElementById("main-canvas") as HTMLCanvasElement;
 const context = canvas.getContext("2d");
@@ -107,12 +106,8 @@ function autoAlignGrid() {
   alignAbortController = controller;
   toolbarControls.setAligning(true);
   toolbarControls.setAlignStats("Aligning…");
-  let profile: GridAlignmentStats | null = null;
   findBestGridAlignmentAsync(state.region, state.grid, {
     signal: controller.signal,
-    onProfile: (stats) => {
-      profile = stats;
-    },
   })
     .then((best) => {
       if (controller.signal.aborted) {
@@ -120,22 +115,8 @@ function autoAlignGrid() {
       }
       alignAbortController = null;
       toolbarControls.setAligning(false);
-      if (profile) {
-        const { timings } = profile;
-        lastAlignStatsText = `${profile.orientations} orient · ${profile.samples} samples · ${profile.durationMs.toFixed(0)}ms`;
-        // eslint-disable-next-line no-console
-        console.info(
-          `Auto align timings: total ${profile.durationMs.toFixed(1)}ms (angles ${timings.anglePrepMs.toFixed(1)}ms, raster ${timings.rasterMs.toFixed(1)}ms, offsets ${timings.offsetsMs.toFixed(1)}ms)`,
-        );
-        if (timings.rasterDetail) {
-          const r = timings.rasterDetail;
-          // eslint-disable-next-line no-console
-          console.info(
-            `  Raster detail: bounds ${r.boundsMs.toFixed(1)}ms, fill ${r.fillMs.toFixed(1)}ms, prefix ${r.prefixMs.toFixed(1)}ms, component ${r.componentMs.toFixed(1)}ms`,
-          );
-        }
-        toolbarControls.setAlignStats(lastAlignStatsText);
-      }
+      lastAlignStatsText = "";
+      toolbarControls.setAlignStats(lastAlignStatsText);
       if (!best) {
         return;
       }

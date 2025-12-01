@@ -46,9 +46,9 @@ function yieldToMainThread() {
 export async function findBestGridAlignmentAsync(
   region: MultiPolygon | null,
   grid: GridState,
-  options: { signal?: AbortSignal; onProfile?: (stats: GridAlignmentStats) => void } = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<GridAlignmentResult | null> {
-  const { signal, onProfile } = options;
+  const { signal } = options;
   let samples = 0;
 
   let lastYieldTime = performance.now();
@@ -62,14 +62,10 @@ export async function findBestGridAlignmentAsync(
     }
   };
 
-  const anglePrepStart = performance.now();
   const candidateAngles = buildCandidateAngles(region);
-  const anglePrepMs = performance.now() - anglePrepStart;
   const offsetStep = grid.spacing / RASTER_RESOLUTION;
   let best: GridAlignmentResult | null = null;
   let orientations = 0;
-  const offsetsPerOrientation = RASTER_RESOLUTION * RASTER_RESOLUTION;
-  const start = performance.now();
   let rasterMs = 0;
   let offsetsMs = 0;
   const rasterDetail = { boundsMs: 0, fillMs: 0, prefixMs: 0, componentMs: 0 };
@@ -116,21 +112,7 @@ export async function findBestGridAlignmentAsync(
     }
   }
 
-  if (onProfile) {
-    const durationMs = performance.now() - start;
-    onProfile({
-      durationMs,
-      orientations,
-      offsetsPerOrientation,
-      samples,
-      timings: {
-        anglePrepMs,
-        rasterMs,
-        offsetsMs,
-        rasterDetail,
-      },
-    });
-  }
+  // Optional: callers can inspect timings here if needed in the future.
 
   return best;
 }
