@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { setupCanvasSizing, resetCamera, resetGrid } from "./camera";
+import { setupCanvasSizing, resetCamera } from "./camera";
 import { setupInteractions } from "./interactions";
 import { renderScene } from "./render";
 import { rasterizeRegion } from "./raster";
@@ -30,13 +30,6 @@ const toolbarControls = setupToolbar({
     resetCamera(state);
     markRasterDirty();
   },
-  onResetGrid: () => {
-    cancelAlignment();
-    state.autoAlignEnabled = false;
-    toolbarControls.setAutoAlignChecked(false);
-    resetGrid(state);
-    markRasterDirty();
-  },
   onToggleAutoAlign: (enabled) => {
     state.autoAlignEnabled = enabled;
     if (enabled) {
@@ -61,6 +54,10 @@ setupInteractions({
 
 toolbarControls.updateModeButtons();
 updateCellCountLabel(0);
+toolbarControls.setAutoAlignChecked(state.autoAlignEnabled);
+if (state.autoAlignEnabled && state.region) {
+  triggerAutoAlign();
+}
 
 function markRasterDirty() {
   rasterDirty = true;

@@ -5,7 +5,6 @@ export interface ToolbarHandlers {
   onModeToggle: (mode: PolygonBooleanMode) => void;
   onClear: () => void;
   onResetCamera: () => void;
-  onResetGrid: () => void;
   onToggleAutoAlign: (enabled: boolean) => void;
 }
 
@@ -76,10 +75,6 @@ export function setupToolbar(handlers: ToolbarHandlers): ToolbarControls {
 
   document.getElementById("reset-camera")?.addEventListener("click", () => {
     handlers.onResetCamera();
-  });
-
-  document.getElementById("reset-grid")?.addEventListener("click", () => {
-    handlers.onResetGrid();
   });
 
   autoAlignToggle?.addEventListener("change", (event) => {

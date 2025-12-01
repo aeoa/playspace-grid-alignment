@@ -11,28 +11,50 @@
   </head>
   <body>
     <div class="toolbar" role="toolbar">
-      <div class="mode-controls" aria-label="Polygon tools">
-        <button class="mode-button" type="button" data-mode="add" aria-pressed="false">
-          Add polygon
-        </button>
-        <button class="mode-button" type="button" data-mode="subtract" aria-pressed="false">
-          Subtract polygon
-        </button>
-      </div>
-      <div class="stats">
-        <span>Cells inside:</span>
-        <strong id="cell-count">0</strong>
-      </div>
-      <div class="controls">
-        <button id="reset-camera" type="button">Reset view</button>
-        <button id="reset-grid" type="button">Reset grid</button>
+      <div class="mode-column">
+        <div class="mode-controls" aria-label="Polygon tools">
+          <button class="mode-button" type="button" data-mode="add" aria-pressed="false">
+            <span class="icon" aria-hidden="true">+</span>
+          </button>
+          <button class="mode-button" type="button" data-mode="subtract" aria-pressed="false">
+            <span class="icon" aria-hidden="true">−</span>
+          </button>
+          <button id="clear-region" class="mode-button ghost" type="button" aria-label="Clear polygons">
+            <span class="icon trash" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <path d="M7 9v9c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V9" />
+                <path d="M5 6h14" />
+                <path d="M10 6v-2c0-.6.4-1 1-1h2c.6 0 1 .4 1 1v2" />
+              </svg>
+            </span>
+          </button>
+        </div>
         <label class="auto-toggle">
           <input type="checkbox" id="auto-align-toggle" />
-          <span>Align Grid</span>
+          <span>Auto align grid</span>
           <span class="busy-indicator" aria-hidden="true"></span>
         </label>
+      </div>
+      <div class="stacked-stats">
+        <div class="stats">
+          <span>Cells inside:</span>
+          <strong id="cell-count">0</strong>
+        </div>
         <span id="align-stats" class="align-stats" aria-live="polite"></span>
-        <button id="clear-region" type="button">Clear</button>
+      </div>
+      <div class="controls">
+        <button id="reset-camera" class="icon-button" type="button" aria-label="Reset view">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M5 9V6a1 1 0 0 1 1-1h3" />
+            <path d="M19 9V6a1 1 0 0 0-1-1h-3" />
+            <path d="M5 15v3a1 1 0 0 0 1 1h3" />
+            <path d="M19 15v3a1 1 0 0 1-1 1h-3" />
+            <path d="M9 9 6 6" />
+            <path d="m18 6-3 3" />
+            <path d="M6 18l3-3" />
+            <path d="m18 18-3-3" />
+          </svg>
+        </button>
       </div>
     </div>
     <canvas id="main-canvas"></canvas>

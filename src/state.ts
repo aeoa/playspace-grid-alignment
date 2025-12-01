@@ -141,6 +141,6 @@ export function createInitialState(): AppState {
     raster: null,
     hoveredGizmo: null,
     hoveredFirstVertex: false,
-    autoAlignEnabled: false,
+    autoAlignEnabled: true,
   };
 }
