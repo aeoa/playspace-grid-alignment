@@ -3,44 +3,73 @@ import { INITIAL_CAMERA_ZOOM } from "./state";
 
 export const MIN_CAMERA_ZOOM = 10;
 export const MAX_CAMERA_ZOOM = 200;
-const FIT_MARGIN_PX = 24;
+const FIT_MARGIN_PX = 12;
 
 export function resetCamera(state: AppState): void {
   const { innerWidth, innerHeight } = window;
-  const insets = getViewportInsets();
-  const usableWidth = Math.max(32, innerWidth - insets.left - insets.right);
-  const usableHeight = Math.max(32, innerHeight - insets.top - insets.bottom);
-  const centerScreen = {
-    x: insets.left + usableWidth / 2,
-    y: insets.top + usableHeight / 2,
+  const bounds = computeRegionBounds(state.region);
+  const baseInsets = { left: FIT_MARGIN_PX, right: FIT_MARGIN_PX, top: FIT_MARGIN_PX, bottom: FIT_MARGIN_PX };
+
+  const fitWithInsets = (insets: typeof baseInsets) => {
+    const usableWidth = Math.max(32, innerWidth - insets.left - insets.right);
+    const usableHeight = Math.max(32, innerHeight - insets.top - insets.bottom);
+    if (!bounds) {
+      const centerScreen = {
+        x: insets.left + usableWidth / 2,
+        y: insets.top + usableHeight / 2,
+      };
+      return {
+        zoom: INITIAL_CAMERA_ZOOM,
+        offset: { x: centerScreen.x, y: centerScreen.y },
+      };
+    }
+    const fitZoom = Math.min(
+      usableWidth / Math.max(bounds.maxX - bounds.minX, 1e-3),
+      usableHeight / Math.max(bounds.maxY - bounds.minY, 1e-3),
+    );
+    const targetZoom = clampZoom(Math.min(INITIAL_CAMERA_ZOOM, fitZoom));
+    const centerScreen = {
+      x: insets.left + usableWidth / 2,
+      y: insets.top + usableHeight / 2,
+    };
+    const regionCenter = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2,
+    };
+    return {
+      zoom: targetZoom,
+      offset: {
+        x: centerScreen.x - regionCenter.x * targetZoom,
+        y: centerScreen.y - regionCenter.y * targetZoom,
+      },
+    };
   };
 
-  const bounds = computeRegionBounds(state.region);
-  if (!bounds) {
-    state.camera.zoom = INITIAL_CAMERA_ZOOM;
-    state.camera.offset.x = centerScreen.x;
-    state.camera.offset.y = centerScreen.y;
-    state.drawingCursorWorld = null;
-    state.hoveredGizmo = null;
-    state.hoveredFirstVertex = false;
-    return;
+  let cameraFit = fitWithInsets(baseInsets);
+
+  if (bounds) {
+    const toolbar = document.querySelector<HTMLElement>(".toolbar");
+    if (toolbar) {
+      const rect = toolbar.getBoundingClientRect();
+      const screenBounds = projectBoundsToScreen(bounds, cameraFit.zoom, cameraFit.offset);
+      const overlapX = screenBounds.maxX > rect.left && screenBounds.minX < rect.right;
+      const overlapY = screenBounds.maxY > rect.top && screenBounds.minY < rect.bottom;
+      if (overlapX && overlapY) {
+        const extraTop = Math.max(0, rect.bottom + FIT_MARGIN_PX - screenBounds.minY);
+        const adjustedInsets = {
+          left: baseInsets.left,
+          right: baseInsets.right,
+          top: baseInsets.top + extraTop,
+          bottom: baseInsets.bottom,
+        };
+        cameraFit = fitWithInsets(adjustedInsets);
+      }
+    }
   }
 
-  const regionSize = {
-    width: Math.max(bounds.maxX - bounds.minX, 1e-3),
-    height: Math.max(bounds.maxY - bounds.minY, 1e-3),
-  };
-  const fitZoom = Math.min(usableWidth / regionSize.width, usableHeight / regionSize.height);
-  const targetZoom = clampZoom(Math.min(INITIAL_CAMERA_ZOOM, fitZoom));
-
-  const regionCenter = {
-    x: (bounds.minX + bounds.maxX) / 2,
-    y: (bounds.minY + bounds.maxY) / 2,
-  };
-
-  state.camera.zoom = targetZoom;
-  state.camera.offset.x = centerScreen.x - regionCenter.x * targetZoom;
-  state.camera.offset.y = centerScreen.y - regionCenter.y * targetZoom;
+  state.camera.zoom = cameraFit.zoom;
+  state.camera.offset.x = cameraFit.offset.x;
+  state.camera.offset.y = cameraFit.offset.y;
   state.drawingCursorWorld = null;
   state.hoveredGizmo = null;
   state.hoveredFirstVertex = false;
@@ -100,12 +129,19 @@ function computeRegionBounds(region: MultiPolygon | null) {
   return { minX, minY, maxX, maxY };
 }
 
-function getViewportInsets() {
-  const base = FIT_MARGIN_PX;
+function projectBoundsToScreen(
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  zoom: number,
+  offset: { x: number; y: number },
+) {
+  const minX = bounds.minX * zoom + offset.x;
+  const maxX = bounds.maxX * zoom + offset.x;
+  const minY = bounds.minY * zoom + offset.y;
+  const maxY = bounds.maxY * zoom + offset.y;
   return {
-    left: base,
-    right: base,
-    top: base,
-    bottom: base,
+    minX: Math.min(minX, maxX),
+    maxX: Math.max(minX, maxX),
+    minY: Math.min(minY, maxY),
+    maxY: Math.max(minY, maxY),
   };
 }
