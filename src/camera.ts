@@ -3,7 +3,7 @@ import { INITIAL_CAMERA_ZOOM } from "./state";
 
 export const MIN_CAMERA_ZOOM = 10;
 export const MAX_CAMERA_ZOOM = 200;
-const FIT_MARGIN_PX = 48;
+const FIT_MARGIN_PX = 24;
 
 export function resetCamera(state: AppState): void {
   const { innerWidth, innerHeight } = window;
@@ -102,15 +102,10 @@ function computeRegionBounds(region: MultiPolygon | null) {
 
 function getViewportInsets() {
   const base = FIT_MARGIN_PX;
-  const toolbar = document.querySelector<HTMLElement>(".toolbar");
-  if (!toolbar) {
-    return { left: base, right: base, top: base, bottom: base };
-  }
-  const rect = toolbar.getBoundingClientRect();
   return {
     left: base,
     right: base,
-    top: Math.max(base, rect.bottom + base),
+    top: base,
     bottom: base,
   };
 }
