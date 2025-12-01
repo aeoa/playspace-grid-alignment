@@ -39,6 +39,8 @@ export interface RasterMask {
   data: Uint8Array;
   width: number;
   height: number;
+  /** Summed area table over `data`, flattened row-major with (width + 1) stride. */
+  prefixSum: Uint32Array;
   /**
    * Size of a raster cell measured in grid units (currently spacing / 10 for a finer raster).
    */

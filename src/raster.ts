@@ -1,5 +1,5 @@
-import { gridToWorld, worldToGrid } from "./geometry";
 import type {
+  ClipRing,
   GridSampleBounds,
   GridState,
   MultiPolygon,
@@ -7,20 +7,29 @@ import type {
   RasterResult,
   Vec2,
 } from "./state";
+import type { RasterTimings } from "./gridAlignment";
 
 const RASTER_MARGIN_CELLS = 2;
-export const RASTER_RESOLUTION = 10;
+export const RASTER_RESOLUTION = 8;
 
-export function rasterizeRegion(region: MultiPolygon | null, grid: GridState): RasterResult | null {
+export function rasterizeRegion(
+  region: MultiPolygon | null,
+  grid: GridState,
+  timings?: RasterTimings,
+): RasterResult | null {
   if (!region) {
     return null;
   }
 
+  const t0 = performance.now();
   const cellSize = grid.spacing / RASTER_RESOLUTION;
-  const bounds = computeGridBounds(region, grid);
+  const regionGrid = transformRegionToGrid(region, grid);
+  const prepared = prepareRegion(regionGrid);
+  const bounds = computeGridBoundsGrid(regionGrid);
   if (!bounds) {
     return null;
   }
+  const tBounds = performance.now();
 
   const minMarginCells = Math.ceil((grid.spacing / 2) / cellSize) + 2;
   const marginCells = Math.max(RASTER_MARGIN_CELLS, minMarginCells);
@@ -35,33 +44,48 @@ export function rasterizeRegion(region: MultiPolygon | null, grid: GridState): R
 
   const originGrid = { x: minX, y: minY };
   const data = new Uint8Array(width * height);
+  const prefixSum = new Uint32Array((width + 1) * (height + 1));
 
   const mask: RasterMask = {
     data,
     width,
     height,
+    prefixSum,
     cellSize,
     originGrid,
   };
 
+  const tFillStart = performance.now();
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const baseGridX = originGrid.x + x * cellSize;
       const baseGridY = originGrid.y + y * cellSize;
+      const center: Vec2 = { x: baseGridX + cellSize * 0.5, y: baseGridY + cellSize * 0.5 };
+      if (!pointInPreparedMultiPolygon(center, prepared)) {
+        continue;
+      }
       const cornersGrid: Vec2[] = [
         { x: baseGridX, y: baseGridY },
         { x: baseGridX + cellSize, y: baseGridY },
         { x: baseGridX + cellSize, y: baseGridY + cellSize },
         { x: baseGridX, y: baseGridY + cellSize },
       ];
-      const fullyInside = cornersGrid.every((corner) =>
-        pointInMultiPolygon(gridToWorld(corner, grid), region),
-      );
+      let fullyInside = true;
+      for (let i = 0; i < cornersGrid.length; i += 1) {
+        if (!pointInPreparedMultiPolygon(cornersGrid[i], prepared)) {
+          fullyInside = false;
+          break;
+        }
+      }
       if (fullyInside) {
         data[y * width + x] = 1;
       }
     }
   }
+  const tFill = performance.now();
+
+  buildPrefixSum(mask);
+  const tPrefix = performance.now();
 
   const gridSampleBounds = computeGridSampleBounds(mask, grid.spacing);
 
@@ -74,8 +98,16 @@ export function rasterizeRegion(region: MultiPolygon | null, grid: GridState): R
   };
 
   const { insideCells, count } = computeLargestComponent(rasterResult);
+  const tComponent = performance.now();
   rasterResult.gridCellCount = count;
   rasterResult.insideCells = insideCells;
+
+  if (timings) {
+    timings.boundsMs += tBounds - t0;
+    timings.fillMs += tFill - tFillStart;
+    timings.prefixMs += tPrefix - tFill;
+    timings.componentMs += tComponent - tPrefix;
+  }
   return rasterResult;
 }
 
@@ -84,14 +116,16 @@ export function sampleRasterAtGridPoint(raster: RasterResult, gridPoint: Vec2): 
 }
 
 export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid: Vec2): number {
-  const visited = new Set<string>();
-  let bestCount = 0;
-
   const gridSampleBounds = computeGridSampleBoundsWithOffset(
     raster.mask,
     raster.gridSpacing,
     offsetGrid,
   );
+  const width = gridSampleBounds.maxX - gridSampleBounds.minX + 1;
+  const height = gridSampleBounds.maxY - gridSampleBounds.minY + 1;
+  const visited = new Uint8Array(width * height);
+  let bestCount = 0;
+
   const directions = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },
@@ -99,13 +133,13 @@ export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid
     { x: 0, y: -1 },
   ];
 
-  const encode = (gx: number, gy: number) => `${gx},${gy}`;
+  const idx = (gx: number, gy: number) => (gy - gridSampleBounds.minY) * width + (gx - gridSampleBounds.minX);
   const spacing = raster.gridSpacing;
 
   for (let gy = gridSampleBounds.minY; gy <= gridSampleBounds.maxY; gy += 1) {
     for (let gx = gridSampleBounds.minX; gx <= gridSampleBounds.maxX; gx += 1) {
-      const key = encode(gx, gy);
-      if (visited.has(key)) {
+      const vIndex = idx(gx, gy);
+      if (visited[vIndex]) {
         continue;
       }
       const gridCenter: Vec2 = {
@@ -113,13 +147,13 @@ export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid
         y: gy * spacing + offsetGrid.y,
       };
       if (!erodeGridCell(raster, gridCenter)) {
-        visited.add(key);
+        visited[vIndex] = 1;
         continue;
       }
 
       const queue: Vec2[] = [{ x: gx, y: gy }];
       let componentSize = 0;
-      visited.add(key);
+      visited[vIndex] = 1;
 
       while (queue.length > 0) {
         const cell = queue.shift()!;
@@ -127,14 +161,14 @@ export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid
         for (const dir of directions) {
           const nx = cell.x + dir.x;
           const ny = cell.y + dir.y;
-          const nkey = encode(nx, ny);
           if (nx < gridSampleBounds.minX || nx > gridSampleBounds.maxX) {
             continue;
           }
           if (ny < gridSampleBounds.minY || ny > gridSampleBounds.maxY) {
             continue;
           }
-          if (visited.has(nkey)) {
+          const nIndex = idx(nx, ny);
+          if (visited[nIndex]) {
             continue;
           }
           const neighborCenter: Vec2 = {
@@ -142,10 +176,10 @@ export function countLargestComponentWithOffset(raster: RasterResult, offsetGrid
             y: ny * spacing + offsetGrid.y,
           };
           if (!erodeGridCell(raster, neighborCenter)) {
-            visited.add(nkey);
+            visited[nIndex] = 1;
             continue;
           }
-          visited.add(nkey);
+          visited[nIndex] = 1;
           queue.push({ x: nx, y: ny });
         }
       }
@@ -165,10 +199,10 @@ function computeGridSampleBounds(mask: RasterMask, spacing: number): GridSampleB
   const maxX = mask.originGrid.x + mask.width * mask.cellSize;
   const maxY = mask.originGrid.y + mask.height * mask.cellSize;
   return {
-    minX: Math.floor(minX / spacing) - 1,
-    maxX: Math.ceil(maxX / spacing) + 1,
-    minY: Math.floor(minY / spacing) - 1,
-    maxY: Math.ceil(maxY / spacing) + 1,
+    minX: Math.floor(minX / spacing),
+    maxX: Math.ceil(maxX / spacing),
+    minY: Math.floor(minY / spacing),
+    maxY: Math.ceil(maxY / spacing),
   };
 }
 
@@ -182,20 +216,23 @@ function computeGridSampleBoundsWithOffset(
   const maxX = mask.originGrid.x + mask.width * mask.cellSize - offset.x;
   const maxY = mask.originGrid.y + mask.height * mask.cellSize - offset.y;
   return {
-    minX: Math.floor(minX / spacing) - 1,
-    maxX: Math.ceil(maxX / spacing) + 1,
-    minY: Math.floor(minY / spacing) - 1,
-    maxY: Math.ceil(maxY / spacing) + 1,
+    minX: Math.floor(minX / spacing),
+    maxX: Math.ceil(maxX / spacing),
+    minY: Math.floor(minY / spacing),
+    maxY: Math.ceil(maxY / spacing),
   };
 }
 
 function computeLargestComponent(
   raster: RasterResult,
 ): { insideCells: Set<string>; count: number } {
-  const visited = new Set<string>();
+  const { gridSampleBounds } = raster;
+  const width = gridSampleBounds.maxX - gridSampleBounds.minX + 1;
+  const height = gridSampleBounds.maxY - gridSampleBounds.minY + 1;
+  const visited = new Uint8Array(width * height);
+  let bestCount = 0;
   let bestComponent: Set<string> = new Set();
 
-  const { gridSampleBounds } = raster;
   const directions = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },
@@ -204,57 +241,59 @@ function computeLargestComponent(
   ];
 
   const encode = (gx: number, gy: number) => `${gx},${gy}`;
+  const idx = (gx: number, gy: number) => (gy - gridSampleBounds.minY) * width + (gx - gridSampleBounds.minX);
 
   for (let gy = gridSampleBounds.minY; gy <= gridSampleBounds.maxY; gy += 1) {
     for (let gx = gridSampleBounds.minX; gx <= gridSampleBounds.maxX; gx += 1) {
-      const key = encode(gx, gy);
-      if (visited.has(key)) {
+      const vIndex = idx(gx, gy);
+      if (visited[vIndex]) {
         continue;
       }
       const gridCenter: Vec2 = { x: gx * raster.gridSpacing, y: gy * raster.gridSpacing };
       if (!sampleRasterAtGridPoint(raster, gridCenter)) {
-        visited.add(key);
+        visited[vIndex] = 1;
         continue;
       }
 
       const queue: Vec2[] = [{ x: gx, y: gy }];
       const component = new Set<string>();
-      visited.add(key);
-      component.add(key);
+      visited[vIndex] = 1;
+      component.add(encode(gx, gy));
 
       while (queue.length > 0) {
         const cell = queue.shift()!;
         for (const dir of directions) {
           const nx = cell.x + dir.x;
           const ny = cell.y + dir.y;
-          const nkey = encode(nx, ny);
           if (nx < gridSampleBounds.minX || nx > gridSampleBounds.maxX) {
             continue;
           }
           if (ny < gridSampleBounds.minY || ny > gridSampleBounds.maxY) {
             continue;
           }
-          if (visited.has(nkey)) {
+          const nIndex = idx(nx, ny);
+          if (visited[nIndex]) {
             continue;
           }
           const neighborCenter: Vec2 = { x: nx * raster.gridSpacing, y: ny * raster.gridSpacing };
           if (!sampleRasterAtGridPoint(raster, neighborCenter)) {
-            visited.add(nkey);
+            visited[nIndex] = 1;
             continue;
           }
-          visited.add(nkey);
-          component.add(nkey);
+          visited[nIndex] = 1;
+          component.add(encode(nx, ny));
           queue.push({ x: nx, y: ny });
         }
       }
 
-      if (component.size > bestComponent.size) {
+      if (component.size > bestCount) {
+        bestCount = component.size;
         bestComponent = component;
       }
     }
   }
 
-  return { insideCells: bestComponent, count: bestComponent.size };
+  return { insideCells: bestComponent, count: bestCount };
 }
 
 /**
@@ -284,17 +323,19 @@ function erodeGridCell(raster: RasterResult, gridPoint: Vec2): boolean {
     return false;
   }
 
-  for (let y = startY; y <= endY; y += 1) {
-    for (let x = startX; x <= endX; x += 1) {
-      if (mask.data[y * mask.width + x] === 0) {
-        return false;
-      }
-    }
-  }
-  return true;
+  const ps = mask.prefixSum;
+  const stride = mask.width + 1;
+  const x0 = startX;
+  const x1 = endX + 1;
+  const y0 = startY;
+  const y1 = endY + 1;
+  const area =
+    ps[y1 * stride + x1] - ps[y0 * stride + x1] - ps[y1 * stride + x0] + ps[y0 * stride + x0];
+  const expectedArea = (endX - startX + 1) * (endY - startY + 1);
+  return area === expectedArea;
 }
 
-function computeGridBounds(region: MultiPolygon, grid: GridState) {
+function computeGridBoundsGrid(region: MultiPolygon) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -302,11 +343,10 @@ function computeGridBounds(region: MultiPolygon, grid: GridState) {
   region.forEach((polygon) => {
     polygon.forEach((ring) => {
       ring.forEach(([x, y]) => {
-        const gridPt = worldToGrid({ x, y }, grid);
-        minX = Math.min(minX, gridPt.x);
-        minY = Math.min(minY, gridPt.y);
-        maxX = Math.max(maxX, gridPt.x);
-        maxY = Math.max(maxY, gridPt.y);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
       });
     });
   });
@@ -316,35 +356,110 @@ function computeGridBounds(region: MultiPolygon, grid: GridState) {
   return { minX, minY, maxX, maxY };
 }
 
-function pointInMultiPolygon(point: Vec2, region: MultiPolygon): boolean {
-  for (const polygon of region) {
-    if (pointInPolygon(point, polygon)) {
+function buildPrefixSum(mask: RasterMask) {
+  const { width, height, data, prefixSum } = mask;
+  const stride = width + 1;
+  for (let y = 0; y < height; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < width; x += 1) {
+      rowSum += data[y * width + x];
+      const idx = (y + 1) * stride + (x + 1);
+      prefixSum[idx] = prefixSum[idx - stride] + rowSum;
+    }
+  }
+}
+
+type PreparedRing = {
+  points: Vec2[];
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type PreparedPolygon = {
+  outer: PreparedRing;
+  holes: PreparedRing[];
+};
+
+function transformRegionToGrid(region: MultiPolygon, grid: GridState): MultiPolygon {
+  const sin = Math.sin(-grid.angle);
+  const cos = Math.cos(-grid.angle);
+  const ox = grid.origin.x;
+  const oy = grid.origin.y;
+  return region.map((polygon) =>
+    polygon.map((ring) =>
+      ring.map(([x, y]) => {
+        const tx = x - ox;
+        const ty = y - oy;
+        const gx = tx * cos - ty * sin;
+        const gy = tx * sin + ty * cos;
+        return [gx, gy];
+      }),
+    ),
+  );
+}
+
+function prepareRegion(region: MultiPolygon): PreparedPolygon[] {
+  return region.map((polygon) => {
+    const outer = prepareRing(polygon[0]);
+    const holes = polygon.slice(1).map((ring) => prepareRing(ring));
+    return { outer, holes };
+  });
+}
+
+function prepareRing(ring: ClipRing): PreparedRing {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  ring.forEach(([x, y]) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  });
+  const points = ring.map(([x, y]) => ({ x, y }));
+  return { points, minX, maxX, minY, maxY };
+}
+
+function pointInPreparedMultiPolygon(point: Vec2, region: PreparedPolygon[]): boolean {
+  for (const poly of region) {
+    if (pointInPreparedPolygon(point, poly)) {
       return true;
     }
   }
   return false;
 }
 
-function pointInPolygon(point: Vec2, polygon: MultiPolygon[number]): boolean {
-  if (!polygon.length) {
+function pointInPreparedPolygon(point: Vec2, polygon: PreparedPolygon): boolean {
+  if (!pointInPreparedRing(point, polygon.outer)) {
     return false;
   }
-  if (!pointInRing(point, polygon[0])) {
-    return false;
-  }
-  for (let i = 1; i < polygon.length; i += 1) {
-    if (pointInRing(point, polygon[i])) {
+  for (const hole of polygon.holes) {
+    if (pointInPreparedRing(point, hole)) {
       return false;
     }
   }
   return true;
 }
 
-function pointInRing(point: Vec2, ring: MultiPolygon[number][number]): boolean {
+function pointInPreparedRing(point: Vec2, ring: PreparedRing): boolean {
+  if (
+    point.x < ring.minX ||
+    point.x > ring.maxX ||
+    point.y < ring.minY ||
+    point.y > ring.maxY
+  ) {
+    return false;
+  }
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+  const pts = ring.points;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i += 1) {
+    const xi = pts[i].x;
+    const yi = pts[i].y;
+    const xj = pts[j].x;
+    const yj = pts[j].y;
     const intersect =
       yi > point.y !== yj > point.y &&
       point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;

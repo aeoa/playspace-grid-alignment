@@ -3,7 +3,7 @@ import { RASTER_RESOLUTION, countLargestComponentWithOffset, rasterizeRegion } f
 import type { GridState, MultiPolygon, Vec2 } from "./state";
 
 const ROTATION_STEP_DEGREES = 5;
-const YIELD_INTERVAL = 10;
+const YIELD_BUDGET_MS = 12;
 
 export interface GridAlignmentResult {
   angle: number;
@@ -16,7 +16,20 @@ export interface GridAlignmentStats {
   orientations: number;
   offsetsPerOrientation: number;
   samples: number;
+  timings: {
+    anglePrepMs: number;
+    rasterMs: number;
+    offsetsMs: number;
+    rasterDetail?: RasterTimings;
+  };
 }
+
+export type RasterTimings = {
+  boundsMs: number;
+  fillMs: number;
+  prefixMs: number;
+  componentMs: number;
+};
 
 const ANGLE_BIN_RESOLUTION = 1; // degrees
 
@@ -27,7 +40,7 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 
 function yieldToMainThread() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 export async function findBestGridAlignmentAsync(
@@ -38,20 +51,28 @@ export async function findBestGridAlignmentAsync(
   const { signal, onProfile } = options;
   let samples = 0;
 
+  let lastYieldTime = performance.now();
   const maybeYield = async () => {
     samples += 1;
-    if (samples % YIELD_INTERVAL === 0) {
+    const now = performance.now();
+    if (now - lastYieldTime >= YIELD_BUDGET_MS) {
       await yieldToMainThread();
       throwIfAborted(signal);
+      lastYieldTime = performance.now();
     }
   };
 
+  const anglePrepStart = performance.now();
   const candidateAngles = buildCandidateAngles(region);
+  const anglePrepMs = performance.now() - anglePrepStart;
   const offsetStep = grid.spacing / RASTER_RESOLUTION;
   let best: GridAlignmentResult | null = null;
   let orientations = 0;
   const offsetsPerOrientation = RASTER_RESOLUTION * RASTER_RESOLUTION;
   const start = performance.now();
+  let rasterMs = 0;
+  let offsetsMs = 0;
+  const rasterDetail = { boundsMs: 0, fillMs: 0, prefixMs: 0, componentMs: 0 };
 
   if (!region) {
     return null;
@@ -59,12 +80,14 @@ export async function findBestGridAlignmentAsync(
 
   for (const angle of candidateAngles) {
     throwIfAborted(signal);
+    const rasterStart = performance.now();
     const baseGrid: GridState = {
       origin: { ...grid.origin },
       angle,
       spacing: grid.spacing,
     };
-    const baseRaster = rasterizeRegion(region, baseGrid);
+    const baseRaster = rasterizeRegion(region, baseGrid, rasterDetail);
+    rasterMs += performance.now() - rasterStart;
     if (!baseRaster) {
       continue;
     }
@@ -72,8 +95,10 @@ export async function findBestGridAlignmentAsync(
     for (let oy = 0; oy < RASTER_RESOLUTION; oy += 1) {
       for (let ox = 0; ox < RASTER_RESOLUTION; ox += 1) {
         throwIfAborted(signal);
+        const offsetStart = performance.now();
         const offsetGrid: Vec2 = { x: ox * offsetStep, y: oy * offsetStep };
         const count = countLargestComponentWithOffset(baseRaster, offsetGrid);
+        offsetsMs += performance.now() - offsetStart;
         if (!best || count > best.cellCount) {
           const offsetWorld = rotate(offsetGrid, angle);
           const originWorld: Vec2 = {
@@ -98,6 +123,12 @@ export async function findBestGridAlignmentAsync(
       orientations,
       offsetsPerOrientation,
       samples,
+      timings: {
+        anglePrepMs,
+        rasterMs,
+        offsetsMs,
+        rasterDetail,
+      },
     });
   }
 

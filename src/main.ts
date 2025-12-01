@@ -114,7 +114,19 @@ function autoAlignGrid() {
       alignAbortController = null;
       toolbarControls.setAligning(false);
       if (profile) {
+        const { timings } = profile;
         lastAlignStatsText = `${profile.orientations} orient · ${profile.samples} samples · ${profile.durationMs.toFixed(0)}ms`;
+        // eslint-disable-next-line no-console
+        console.info(
+          `Auto align timings: total ${profile.durationMs.toFixed(1)}ms (angles ${timings.anglePrepMs.toFixed(1)}ms, raster ${timings.rasterMs.toFixed(1)}ms, offsets ${timings.offsetsMs.toFixed(1)}ms)`,
+        );
+        if (timings.rasterDetail) {
+          const r = timings.rasterDetail;
+          // eslint-disable-next-line no-console
+          console.info(
+            `  Raster detail: bounds ${r.boundsMs.toFixed(1)}ms, fill ${r.fillMs.toFixed(1)}ms, prefix ${r.prefixMs.toFixed(1)}ms, component ${r.componentMs.toFixed(1)}ms`,
+          );
+        }
         toolbarControls.setAlignStats(lastAlignStatsText);
       }
       if (!best) {
