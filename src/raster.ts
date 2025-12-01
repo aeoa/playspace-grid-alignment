@@ -361,16 +361,18 @@ function transformRegionToGrid(region: MultiPolygon, grid: GridState): MultiPoly
 }
 
 function fillMaskWithCanvas(mask: RasterMask, regionGrid: MultiPolygon) {
+  const SCALE = 4; // fixed oversample to reduce AA variance
   const canvas = document.createElement("canvas");
-  canvas.width = mask.width;
-  canvas.height = mask.height;
+  canvas.width = mask.width * SCALE;
+  canvas.height = mask.height * SCALE;
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     throw new Error("Failed to get 2d context for rasterization");
   }
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  const scale = 1 / mask.cellSize;
+  const scale = SCALE / mask.cellSize;
   const offsetX = -mask.originGrid.x * scale;
   const offsetY = -mask.originGrid.y * scale;
 
@@ -390,16 +392,28 @@ function fillMaskWithCanvas(mask: RasterMask, regionGrid: MultiPolygon) {
   });
   ctx.fill("evenodd");
 
-  const imageData = ctx.getImageData(0, 0, mask.width, mask.height).data;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   const data = mask.data;
-  const stride = mask.width * 4;
+  const rowStride = canvas.width * 4;
+  const alphaStride = 4;
   let di = 0;
   for (let y = 0; y < mask.height; y += 1) {
-    let si = y * stride + 3; // alpha channel
     for (let x = 0; x < mask.width; x += 1) {
-      data[di] = imageData[si] === 255 ? 1 : 0;
+      let covered = true;
+      const baseY = y * SCALE;
+      const baseX = x * SCALE;
+      for (let sy = 0; sy < SCALE && covered; sy += 1) {
+        let si = (baseY + sy) * rowStride + (baseX * alphaStride) + 3; // alpha channel
+        for (let sx = 0; sx < SCALE; sx += 1) {
+          if (imageData[si] !== 255) {
+            covered = false;
+            break;
+          }
+          si += alphaStride;
+        }
+      }
+      data[di] = covered ? 1 : 0;
       di += 1;
-      si += 4;
     }
   }
 }
