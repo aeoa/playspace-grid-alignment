@@ -1,5 +1,4 @@
 import type {
-  ClipRing,
   GridSampleBounds,
   GridState,
   MultiPolygon,
@@ -24,7 +23,6 @@ export function rasterizeRegion(
   const t0 = performance.now();
   const cellSize = grid.spacing / RASTER_RESOLUTION;
   const regionGrid = transformRegionToGrid(region, grid);
-  const prepared = prepareRegion(regionGrid);
   const bounds = computeGridBoundsGrid(regionGrid);
   if (!bounds) {
     return null;
@@ -56,32 +54,7 @@ export function rasterizeRegion(
   };
 
   const tFillStart = performance.now();
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const baseGridX = originGrid.x + x * cellSize;
-      const baseGridY = originGrid.y + y * cellSize;
-      const center: Vec2 = { x: baseGridX + cellSize * 0.5, y: baseGridY + cellSize * 0.5 };
-      if (!pointInPreparedMultiPolygon(center, prepared)) {
-        continue;
-      }
-      const cornersGrid: Vec2[] = [
-        { x: baseGridX, y: baseGridY },
-        { x: baseGridX + cellSize, y: baseGridY },
-        { x: baseGridX + cellSize, y: baseGridY + cellSize },
-        { x: baseGridX, y: baseGridY + cellSize },
-      ];
-      let fullyInside = true;
-      for (let i = 0; i < cornersGrid.length; i += 1) {
-        if (!pointInPreparedMultiPolygon(cornersGrid[i], prepared)) {
-          fullyInside = false;
-          break;
-        }
-      }
-      if (fullyInside) {
-        data[y * width + x] = 1;
-      }
-    }
-  }
+  fillMaskWithCanvas(mask, regionGrid);
   const tFill = performance.now();
 
   buildPrefixSum(mask);
@@ -369,19 +342,6 @@ function buildPrefixSum(mask: RasterMask) {
   }
 }
 
-type PreparedRing = {
-  points: Vec2[];
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-};
-
-type PreparedPolygon = {
-  outer: PreparedRing;
-  holes: PreparedRing[];
-};
-
 function transformRegionToGrid(region: MultiPolygon, grid: GridState): MultiPolygon {
   const sin = Math.sin(-grid.angle);
   const cos = Math.cos(-grid.angle);
@@ -400,74 +360,48 @@ function transformRegionToGrid(region: MultiPolygon, grid: GridState): MultiPoly
   );
 }
 
-function prepareRegion(region: MultiPolygon): PreparedPolygon[] {
-  return region.map((polygon) => {
-    const outer = prepareRing(polygon[0]);
-    const holes = polygon.slice(1).map((ring) => prepareRing(ring));
-    return { outer, holes };
+function fillMaskWithCanvas(mask: RasterMask, regionGrid: MultiPolygon) {
+  const canvas = document.createElement("canvas");
+  canvas.width = mask.width;
+  canvas.height = mask.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to get 2d context for rasterization");
+  }
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  const scale = 1 / mask.cellSize;
+  const offsetX = -mask.originGrid.x * scale;
+  const offsetY = -mask.originGrid.y * scale;
+
+  regionGrid.forEach((polygon) => {
+    polygon.forEach((ring) => {
+      ring.forEach(([x, y], idx) => {
+        const px = x * scale + offsetX;
+        const py = y * scale + offsetY;
+        if (idx === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      });
+      ctx.closePath();
+    });
   });
-}
+  ctx.fill("evenodd");
 
-function prepareRing(ring: ClipRing): PreparedRing {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  ring.forEach(([x, y]) => {
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
-  });
-  const points = ring.map(([x, y]) => ({ x, y }));
-  return { points, minX, maxX, minY, maxY };
-}
-
-function pointInPreparedMultiPolygon(point: Vec2, region: PreparedPolygon[]): boolean {
-  for (const poly of region) {
-    if (pointInPreparedPolygon(point, poly)) {
-      return true;
+  const imageData = ctx.getImageData(0, 0, mask.width, mask.height).data;
+  const data = mask.data;
+  const stride = mask.width * 4;
+  let di = 0;
+  for (let y = 0; y < mask.height; y += 1) {
+    let si = y * stride + 3; // alpha channel
+    for (let x = 0; x < mask.width; x += 1) {
+      data[di] = imageData[si] === 255 ? 1 : 0;
+      di += 1;
+      si += 4;
     }
   }
-  return false;
-}
-
-function pointInPreparedPolygon(point: Vec2, polygon: PreparedPolygon): boolean {
-  if (!pointInPreparedRing(point, polygon.outer)) {
-    return false;
-  }
-  for (const hole of polygon.holes) {
-    if (pointInPreparedRing(point, hole)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function pointInPreparedRing(point: Vec2, ring: PreparedRing): boolean {
-  if (
-    point.x < ring.minX ||
-    point.x > ring.maxX ||
-    point.y < ring.minY ||
-    point.y > ring.maxY
-  ) {
-    return false;
-  }
-  let inside = false;
-  const pts = ring.points;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i += 1) {
-    const xi = pts[i].x;
-    const yi = pts[i].y;
-    const xj = pts[j].x;
-    const yj = pts[j].y;
-    const intersect =
-      yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;
-    if (intersect) {
-      inside = !inside;
-    }
-  }
-  return inside;
 }
 
 // TODO: Future version will align the grid origin with geometric features for better sampling.
